@@ -1,0 +1,619 @@
+---
+title: 'Projet Irlande'
+date: '2026-03-13'
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{=html}
+<style>
+.reponse {
+  margin: 15px 0; /* Espace réduit entre les boîtes */
+  background-color: #f9fbff;
+  border-left: 3px solid #d0d7de;
+  padding: 12px;
+  border-radius: 6px;
+}
+h1, h2, h3 {
+  font-weight: 800;
+  color: #505050;
+  margin-top: 20px;
+}
+#TOC {
+  background-color: #fcfcfc;
+  border: none;
+  font-size: 0.85em;
+}
+.list-group-item.active {
+  background-color: #f0f4f8 !important;
+  color: #337ab7 !important;
+  border: none;
+}
+</style>
+```
+
+
+# 1. Introduction 
+
+::: reponse
+<u>**Choix du pays :**</u>
+
+J'ai choisi l'Irlande pour ce projet d'économétrie des séries temporelles, étant donné que ce pays présente des caractéristiques idéales pour appliquer les outils d'analyse de tendance et de saisonnalité vus en cours. 
+
+Le premier motif de ce choix est l'influence marquée du climat océanique irlandais sur la consommation énergétique. En effet, l'Irlande connaît des hivers frais et des étés doux ; il est donc particulièrement intéressant d'analyser comment ces variations météorologiques se reflètent dans la composante saisonnière de la demande (besoins accrus en chauffage et en éclairage en hiver).
+
+En outre, le contexte géopolitique enrichit l'analyse : les tensions du Brexit ont fortement impacté l'économie irlandaise (malgré le fait que l'Irlande demeure au sein de l'UE et ne participe pas directement à ce retrait), offrant ainsi un cadre d'étude complexe. En analysant la série temporelle de la demande, l'objectif est d'identifier si cet événement a provoqué une modification du comportement de consommation du pays.
+
+De plus, le jeu de données mis à disposition est très complet concernant l'Irlande, couvrant la période de janvier 2010 à octobre 2025, ce qui garantit une plus grande précision dans l'estimation de nos modèles et la fiabilité des résultats.
+
+Enfin, l'Irlande affichant l'une des croissances économiques les plus fortes d'Europe, cette analyse permettra d'étudier la tendance de long terme : nous pourrons vérifier si ce dynamisme économique se traduit par une hausse structurelle de la demande électrique.
+:::
+
+
+::: reponse
+<u>**Etude des données :**</u>
+
+Pour mener à bien cette étude, nous analysons la demande globale d'électricité. 
+
+L'analyse de cette série est d'autant plus pertinente que l'Irlande connaît un développement éolien massif afin de réduire sa dépendance aux énergies fossiles. Cette transition vers une production renouvelable croissante doit répondre à une demande de plus en plus forte, portée notamment par l'implantation massive de centres de données (Data Centers). 
+
+Étudier cette série temporelle, exprimée en Térawattheures (TWh), nous offre donc une vision d'ensemble de l'activité énergétique de l'île et nous permet de vérifier si son dynamisme économique se traduit par une tendance structurelle à la hausse.
+:::
+
+
+# 2. Analyse de la série 
+
+## 2.1. Préparation des données
+
+```{r}
+library(forecast)
+library(lmtest)
+library(urca)
+```
+
+
+```{r}
+data = read.csv("data_projet.csv")
+```
+
+Après avoir chargé le jeu de données complet, on sélectionne uniquement les données concernant l'Irlande. Ensuite, on s'intéresse à l'évolution de la consommation d'énergie du pays, c'est pourquoi on va anlayser la variable 'Demand'.
+
+
+```{r}
+data_filter = subset(data, Area == "Ireland")
+data_demand = subset(data_filter, Variable == "Demand")
+```
+
+
+On crée une série temporelle qui prend en compte la fréquence mensuelle des données et le début de l'enregistrement (janvier 2010).
+
+
+```{r}
+demand = ts(data_demand$Value, start = c(2010, 1), freq = 12)
+```
+
+## 2.2. Analyse de la saisonnalité
+
+
+Pour analyser l'évolution de la demande d'électicité, nous allons construire un chronogramme de la variable 'Demand'.
+
+
+```{r}
+plot.ts(demand, main = "Demande d'électricité en Irlande", xaxt = "n", xlab = "Année")
+annees <- seq(2010, 2026, by = 2)
+axis(1, at = annees)
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+Le chronogramme obtenu présente une tendance croissante, ce qui traduit le dynamisme économique de l'Irlande sur la période 2010-2025. 
+Au delà d'une saisonnalité marquée, on peut observer trois creux plus prononcés : 
+- La baisse légère de la demande entre 2016 et 2018 coïncide avec le fait que cette période a été marquée par une forte incertitude économique en Irlande, ce qui a pu entraîner un ralentissement temporaire de la production industrielle et donc une baisse de la consommation électrique. En effet le référendum sur le Brexit a eu lieu fin 2016, mais ses effets concrets ont culminé en 2017-2018 (même si l'Irlande demeure au sein de l'UE et ne participe pas directement à ce retrait, elle a indirectement été impactée par cet évènement).
+- Le deuxième creux, nettement plus marqué, entre 2020 et 2021, constitue une rupture brutale liée à la pandémie de COVID-19 : les mesures de confinement strictes en Irlande ont entraîné un arrêt massif de l'activité commerciale et industrielle, provoquant une chute de la demande bien au-delà des variations saisonnières classiques.
+- Enfin, l'affaissement observé entre 2021 et 2022 illustre l'impact de la crise énergétique européenne. La flambée des prix de l'électricité a généré un effet de restriction de la consommation chez les agents économiques. 
+
+Ces trois événements constituent des points atypiques dans notre série, il sera donc intéressant de voir si on retrouve ces baisses significatives de la demande d'électricité dans notre analyse. 
+:::
+
+
+
+Il est important d'analyser l'évolution de la variance au cours du temps pour choisir un modèle additif ou multiplcatif. La variance des données est représentée par l'écart entre les pics et les creux sur le chronogramme. Ici on peut voir que lorsqu'on mesure l'écart entre les creux et les pics au cours du temps, cet écart varie : il diminue d'abord entre 2010 et 2017, puis augmente entre 2017 jusqu'à aujourd'hui. Cela justifie le choix d'un schéma de décomposition multiplicatif. 
+
+
+
+```{r}
+plot(decompose(demand,"multiplicative", filter = NULL))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+Cette décomposition confirme la tendance croissante et une saisonnalité claire des données. 
+:::
+
+
+
+```{r}
+monthplot(demand)
+```
+
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+Les mois de décembre à mars enregistrent les demandes d'énergie les plus importantes de l'année. Le mois d'août enregistre la consommation moyenne la plus basse. Par ailleurs, les données du mois de juillet sont les moins volatiles, ce qui témoigne de la stabilité des conditions météorologiques pour ce mois d'une année sur l'autre.
+:::
+
+## 2.3. Retrait de la saisonnalité 
+
+```{r}
+demand12=diff(demand,12)
+plot(demand12)
+```
+
+::: reponse
+<u>**Interprétation :**</u>
+
+Après différeciation de la série à l'ordre 12, on obtient un nouveau chronogramme sur lequel la demande en électricité fluctue autour d'une moyenne proche de 0. 
+:::
+
+
+# 3. Tests de racine unitaire 
+
+## 3.1. Test de Dick et Fuller
+
+### 3.1.1. Test de spécification drift
+```{r}
+summary(ur.df(demand12, type="drift", lags=0))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$Δy_t$ = $ß_0$ + (ρ-1) $y_{t-1}$ + $ϵ_t$
+
+$H_0$ : $ß_0$ = 0 
+
+$H_a$ : $ß_0$ ≠ 0
+
+
+La pvalue du coefficent $ß_0$ (associée à intercept) est égale à 0.00474 ; elle est inférieure au seuil de 5%, alors on rejette l'hypothèse nulle et $ß_0$ est significatif. 
+
+
+
+On teste ensuite : 
+
+$H_0$ : (ρ−1) = 0
+
+$H_a$ : |ρ| < 1
+
+
+La valeur de la statistique de test associée à (ρ−1) est égale à -7.5678 ; elle est inférieure à la valeur critique au seuil de 5% (= - 2.88), alors on rejette l'hypothèse nulle.
+Donc on ne valide pas la spécifcation DS, le PGD est stationnaire d'après le test de Dickey Fuller. 
+:::
+
+
+### 3.1.2. Test d'autocorrélation des aléas
+
+```{r}
+plot(ur.df(demand12, type="drift", lags=0))
+```
+
+::: reponse
+<u>**Interprétation :**</u>
+
+L'examen de l'ACF révèle que les résidus présentent des autocorrélations significatives aux ordres 12 et 13, les pics dépassant les bornes de confiance. Toutefois, nous privilégierons l'analyse de la PACF, celle-ci différant légèrement de l'ACF. Selon la PACF, les résidus sont autocorrélés aux ordres 12, 13 et 17, ce qui remet en cause la validité des tests de racine unitaire de Dickey-Fuller.
+:::
+
+
+## 3.2. Test de Dick et Fuller Augmenté
+
+
+Le test ADF constitue une extension du test de Dickey-Fuller (DF) intégrant des variables explicatives additionnelles. Ces variables correspondent à la variable dépendante différenciée, retardée jusqu'à l'ordre p. En pratique, on conserve pour le test ADF la même spécification structurelle que celle retenue pour le test DF.
+
+
+Pour déterminer la valeur maximale de retard à introduire (pmax) on utilise la formule de Schwert et on minimise le critère MAIC.
+
+
+```{r}
+T=length(demand12)
+pmax=as.integer(12*(T/100)^(0.25));library(CADFtest)
+summary(CADFtest(demand12,criterion="MAIC",type="drift",max.lag.y=pmax))
+```
+
+::: reponse
+<u>**Interprétation :**</u>
+
+Le MAIC donne pmax=9, on introduit alors 9 variables explicatives additionelles dans la régression.
+On ôte un par un les γ qui ne sont pas significatifs jusqu’à aboutir à un modèle où le dernier γ est significatif (au seuil de 10%).
+:::
+
+
+```{r}
+summary(ur.df(demand12,type="drift",lag=3))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$\Delta Y_t = \beta_0 + (\rho - 1)Y_{t-1} + \sum_{p=1}^{3} \gamma_p \Delta Y_{t-p} + \epsilon_t $$
+
+$H_0$ : $γ_3$ = 0 
+
+$H_a$ : $γ_3$ ≠ 0
+
+La p value associée du coefficient $γ_3$ (associée à z.diff.lag3) est égale à 0.0495  ; elle est inférieure au seuil critique de 10% donc on rejette l'hypothèse nulle. $γ_3$ est significatif.
+
+
+La pvalue du coefficeint $ß_0$ (associée à intercept) reste inférieure à 0,05, donc le coefficeint $ß_0$ est toujours significatif après l'ajout de variables explicatives. On garde la spécification drift. 
+
+
+$H_0$ : (ρ−1) = 0
+
+$H_a$ : |ρ| < 1
+
+La valeur de la statistique calculée (= -4.6323) est inférieure à la valeur critique au seuil de 5% (= - 2.88), on en déduit donc que le PGD est stationnaire. 
+:::
+
+
+## 3.3. Test Zivot & Andraws
+
+
+Afin de détecter l'éventuelle présence de ruptures structurelles ayant pu affecter la demande d'électricité en Irlande, on applique le test ZA en redémarrant à l'ordre de retard p=3 (précédemment déterminé lors du test ADF).
+
+
+
+Après avoir ôté un par un les γ qui n'étaient pas significatifs, on a abouti à un modèle avec une seule variable explicative additionelle.
+
+```{r}
+summary(ur.za(demand12,model="both",lag=1))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$y_t = \beta_0 + \beta_1 t + \rho y_{t-1} + \delta_1 DU_t(T_B) + \delta_2 DT_t(T_B) + \sum_{j=1}^{1} \gamma_j \Delta y_{t-j} + \epsilon_t$$
+
+$H_0$ : $γ_1$ = 0 
+
+$H_a$ : $γ_1$ ≠ 0
+
+On remarque que la pvalue du coefficient $γ_1$ (associée à y.dl1) est égale à 0.024927 ; elle est largement inférieure à 10% donc $γ_1$ est significatif.
+
+
+$H_0$ : $δ_1$ = 0 et $δ_2$ = 0
+
+$H_a$ : $δ_1$ ≠ 0 et $δ_2$ ≠ 0
+
+La pvalue de  $δ_1$ (associée à du) est égale à 0.002902 ; elle est inférieure au seuil critique de 5% donc $δ_1$ est significatif.
+La pvalue de  $δ_2$ (associée à dt) est égale à 0.000791 ; elle est inférieure au seuil critique de 5% donc $δ_2$ est significatif.
+
+
+
+$H_0$ : (ρ−1) = 0
+
+$H_a$ : |ρ| < 1
+
+Sous $H_0$, le PGD est DS sans date de rupture.
+
+Sous $H_a$, le PGD est TS avec une date de rupture.
+
+
+La statistique de test (= -8.4965) est inférieure à la valeur critique au seuil de 5% (=-5.08), donc on rejette l'hypothèse nulle. De plus $ß_0$ est significatif, donc le PGD est TS avec une date de rupture. 
+:::
+
+
+```{r}
+plot(ur.za(demand12, model="both",lag=1))
+as.yearmon(time(demand12))[68]
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+D'après le test de Zivot & Andraws le PGD est TS avec une date de rupture en août 2016.
+:::
+
+
+## 3.4. Test de Lee et Strazicich
+
+Nous n'utiliserons pas Bootstrap pour ce test LS car nous avons assez de données (plus de 35).
+
+
+```{r}
+setwd("~/Desktop/Master/M1/S2/Econometrie ST/LeeStrazicichUnitRoot-master")
+source("LeeStrazicichUnitRootTest.R")
+
+
+myBreaks <- 1
+myModel <- "break"
+myLags <- 1
+myLS_test <- ur.ls(y=demand12 , model = myModel, breaks = myBreaks, lags = myLags, method = "GTOS",pn = 0.1, print.results = "print" )
+```
+
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$y_t = \mu_0+d_1B_{1t}+d_2B_{2t}+d_3D_{1t}+d_4D_{2t}+y_{t-1}+v_{1t}\quad\text{sous }H_0 $$
+$$y_t = \mu_1+\gamma*\mathit{trend}_t+d_1D_{1t}+d_2D_{2t}+d_3DT_{1t}+d_4DT_{2t}+v_{2t}\quad\text{sous }H_a$$
+
+$H_0$ : "Le PGD est DS avec une date de rupture"
+
+$H_a$ : "Le PGD est TS avec une date de rupture"
+
+On compare la valeur de la statitiqte avec la valeur critique associée à lambda_1 = 0.4, au seuil de risque de 5%.
+La statistique de test (= -8.242807) est inférieure à la valeur critique (=-4.50), donc on rejette l'hypothèse nulle de présence de racine unitaire avec une date de rupture.
+:::
+
+```{r}
+as.yearmon(time(demand12))[63]
+```
+
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+Dans ZA $ß_1$ était significatif, avec rho en valeur absolue plus petit que 1, on en conclue donc que le PGD est TS d'après le test de Lee et Strazicich avec une rupture en mars 2016.
+:::
+
+
+```{r}
+myBreaks <- 2
+myModel <- "break"
+myLags <- 1
+myLS_test <- ur.ls(y=demand12 , model = myModel, breaks = myBreaks, lags = myLags, method = "GTOS",pn = 0.1, print.results = "print" )
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$y_t = \mu_0 + d_1 B_{1t} + d_2 B_{2t} + d_3 D_{1t} + d_4 D_{2t} + y_{t-1} + v_{1t} \quad \text{sous } H_0$$
+
+$$y_t = \mu_1 + \gamma \cdot \text{trend}_t + d_1 D_{1t} + d_2 D_{2t} + d_3 DT_{1t} + d_4 DT_{2t} + v_{2t} \quad \text{sous } H_a$$
+
+$H_0$ : "Le PGD est DS avec deux dates de rupture"
+
+$H_a$ : "Le PGD est TS avec deux dates de rupture"
+
+
+
+On compare la statistique de test à la valeur critique au croisement de lambda 1 et lambda 2 au seuil de 5%.
+
+lambda_1: 0.4
+
+lambda_2: 0.8
+
+La valeur de la stistique de test (= -9.002187) est inférieure à la valeur critique (= -5,65), donc on rejette l'hypothèse nulle.
+
+:::
+
+```{r}
+as.yearmon(time(demand12))[69]
+as.yearmon(time(demand12))[149]
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+Dans ZA $ß_1$ était significatif, avec rho en valeur absolue plus petit que 1, on en conclue donc que le PGD est TS d'après le test de Lee et Strazicich avec deux ruptures en septembre 2016 et mai 2023.
+:::
+
+
+# 4. Conclusion 
+
+::: reponse
+
+Le test LS avec un break étant plus puissant que celui avec deux breaks, on va préférer conclure en s'appuyant sur les résultats du test LS avec une date de rupture. 
+D'après le test de Lee et Strazicich, le PGD est TS avec une rupture structurelle (sur le niveau et la pente de la série) en mars 2016. Cette date ne faisait pas apparaitre une consommation d'électricté aberrante sur notre chronogramme. Cependant, l'Irlande a été marquée par plusieurs évènements au cours de cette période qui pourraient expliquer cette date de rupture. 
+
+Tout d'abord, le développement intensif des centres de données, concentrés principalement dans la région de Dublin, a commencé à peser lourdement sur la demande électrique irlandaise au début de l'année 2016. Ces installations, opérées par de grandes multinationales technologiques, consomment de l'énergie de manière constante et massive, transformant le profil de consommation national en une charge de base permanente et en forte croissance.
+
+*EirGrid & SONI. (2016). All-Island Generation Capacity Statement 2016-2025. EirGrid Group*
+
+*The Irish Times. (2016, mars)¨*
+
+
+De plus, la crise financière mondiale de 2008 et l'effondrement de la bulle immobilière irlandaise avaient entraîné une récession prolongée. En mars 2016, le dynamisme retrouvé des secteurs de la biopharmacie et de l'électronique a provoqué une augmentation nette de la demande d'électricité. 
+
+*Central Statistics Office. (2016). Industrial Production and Turnover (March 2016). CSO Ireland.*
+
+*Sustainable Energy Authority of Ireland. (2016). Energy in Ireland 1990 - 2015 (Report 2016)*
+
+
+
+:::
+
+# 5. Annexes
+
+## 5.1. DF
+
+Test de spécification trend 
+
+```{r}
+summary(ur.df(demand12, type="trend", lags=0))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$Δy_t$ = (ρ-1) $y_{t-1}$ + $ß_0$ + $ß_1$.$tendance_t$ + $ϵ_t$
+
+$H_0$ : ρ−1 = 0 et $ß_1$ = 0 
+
+$H_a$ :|ρ|<1 and $ß_1$ ≠ 0
+
+La pvalue du coefficient $ß_1$ (associée à "tt") est égale à 0,427 ; elle est supérieure au seuil de 5%, donc on accepte l'hypothèse nulle que le coefficient $ß_1$ est nul. 
+On peut dors et déjà en déduire que le PGD n'est pas TS d'après le test de Dickey Fuller. 
+On passe à la spécification drift. 
+:::
+
+
+## 5.2. ADF 
+
+
+```{r}
+summary(ur.df(demand12,type="drift",lag=9))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+La pvalue du coefficeint $ß_0$ (associée à intercept) reste inférieure à 0,05, donc le coefficeint $ß_0$ est toujours significatif après l'ajout de variables explicatives. On garde la spécification drift. 
+
+$$\Delta Y_t = (\rho - 1)Y_{t-1} + \beta_0 + \epsilon_t + \sum_{p=1}^{9} \gamma_p \Delta Y_{t-p}$$
+
+$H_0$ : $γ_9$ = 0 
+
+$H_a$ : $γ_9$ ≠ 0
+
+La p value du coefficient $γ_9$ (associée à z.diff.lag9) est égale à 0.51717 ; elle est supérieure au seuil critique de 10% donc on accepte l'hypothèse nulle que $γ_9$ est nul. 
+
+On ôte un par un les γ qui ne sont pas significatifs jusqu’à aboutir à un modèle où le dernier γ est significatif.
+:::
+
+
+```{r}
+summary(ur.df(demand12,type="drift",lag=8))
+```
+
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$\Delta Y_t = (\rho - 1)Y_{t-1} + \beta_0 + \epsilon_t + \sum_{p=1}^{8} \gamma_p \Delta Y_{t-p}$$
+
+$H_0$ : $γ_8$ = 0 
+
+$H_a$ : $γ_8$ ≠ 0
+
+La p value du coefficient $γ_8$ (associée à z.diff.lag8) est égale à 0.42660 ; elle est supérieure au seuil critique de 10% donc on accepte l'hypothèse nulle que $γ_8$ est nul. 
+:::
+
+
+```{r}
+summary(ur.df(demand12,type="drift",lag=7))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$\Delta Y_t = (\rho - 1)Y_{t-1} + \beta_0 + \epsilon_t + \sum_{p=1}^{7} \gamma_p \Delta Y_{t-p}$$
+
+$H_0$ : $γ_7$ = 0 
+
+$H_a$ : $γ_7$ ≠ 0
+
+La p value du coefficient $γ_7$ (associée à z.diff.lag7) est égale à 0.33375 ; elle est supérieure au seuil critique de 10% donc on accepte l'hypothèse nulle que $γ_7$ est nul. 
+:::
+
+```{r}
+summary(ur.df(demand12,type="drift",lag=6))
+```
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$\Delta Y_t = (\rho - 1)Y_{t-1} + \beta_0 + \epsilon_t + \sum_{p=1}^{6} \gamma_p \Delta Y_{t-p}$$
+
+$H_0$ : $γ_6$ = 0 
+
+$H_a$ : $γ_6$ ≠ 0
+
+La p value du coefficient $γ_6$ (associée à z.diff.lag6) est égale à 0.950205 ; elle est supérieure au seuil critique de 10% donc on accepte l'hypothèse nulle que $γ_6$ est nul.
+:::
+
+
+```{r}
+summary(ur.df(demand12,type="drift",lag=5))
+```
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$\Delta Y_t = (\rho - 1)Y_{t-1} + \beta_0 + \epsilon_t + \sum_{p=1}^{5} \gamma_p \Delta Y_{t-p}$$
+
+$H_0$ : $γ_5$ = 0 
+
+$H_a$ : $γ_5$ ≠ 0
+
+La p value du coefficient $γ_5$ (associée à z.diff.lag5) est égale à 0.862930 ; elle est supérieure au seuil critique de 10% donc on accepte l'hypothèse nulle que $γ_5$ est nul.
+:::
+
+```{r}
+summary(ur.df(demand12,type="drift",lag=4))
+```
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$\Delta Y_t = (\rho - 1)Y_{t-1} + \beta_0 + \epsilon_t + \sum_{p=1}^{4} \gamma_p \Delta Y_{t-p}$$
+
+$H_0$ : $γ_4$ = 0 
+
+$H_a$ : $γ_4$ ≠ 0
+
+La p value du coefficient $γ_4$ (associée à z.diff.lag4) est égale à 0.5193 ; elle est supérieure au seuil critique de 10% donc on accepte l'hypothèse nulle que $γ_4$ est nul.
+:::
+
+
+## 5.3. ZA
+
+```{r}
+summary(ur.za(demand12,model="both",lag=3))
+```
+
+
+
+::: reponse
+<u>**Interprétation :**</u>
+
+$$y_t = \beta_0 + \beta_1 t + \rho y_{t-1} + \delta_1 DU_t(T_B) + \delta_2 DT_t(T_B) + \sum_{j=1}^{3} \gamma_j \Delta y_{t-j} + \epsilon_t$$
+
+$H_0$ : $γ_3$ = 0 
+
+$H_a$ : $γ_3$ ≠ 0
+
+On remarque que la pvalue du coefficient $γ_3$ (associée à y.dl3) est égale à 0.195071 ; elle est supérieure au seuil de 10% donc on ôte un par un les γ qui ne sont pas significatifs jusqu’à aboutir à un modèle où le dernier γ est significatif.
+:::
+
+
+```{r}
+summary(ur.za(demand12,model="both",lag=2))
+```
+::: reponse
+<u>**Interprétation :**</u>
+
+$$y_t = \beta_0 + \beta_1 t + \rho y_{t-1} + \delta_1 DU_t(T_B) + \delta_2 DT_t(T_B) + \sum_{j=1}^{2} \gamma_j \Delta y_{t-j} + \epsilon_t$$
+
+$H_0$ : $γ_2$ = 0 
+
+$H_a$ : $γ_2$ ≠ 0
+
+On remarque que la pvalue du coefficient $γ_2$ (associée à y.dl2) est égale à 0.497912 ; elle est supérieure au seuil de 10% donc on ôte un par un les γ qui ne sont pas significatifs jusqu’à aboutir à un modèle où le dernier γ est significatif.
+:::
+
+
+
